@@ -18,6 +18,14 @@ class BuildingMakerPanel(bpy.types.Panel):
         self.layout.prop(bpy.context.scene.building_props, 'size_x_prop')
         self.layout.prop(bpy.context.scene.building_props, 'size_y_prop')
         self.layout.prop(bpy.context.scene.building_props, 'level_count_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'level_height_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'wnd_width_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'wnd_height_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'interval_width_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'gap_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'top_gap_prop')
+        self.layout.prop(bpy.context.scene.building_props, 'bottom_gap_prop')
+
         TheCol.operator("mesh.make_building", text="Add Building")
     #end draw
 
@@ -29,15 +37,43 @@ class BuildingMakerPanel(bpy.types.Panel):
 class MakerPanelProperties(PropertyGroup):
     size_x_prop = IntProperty(
             name='X Size', min=1, default=30,
-            description='X Size of building',
+            description='X Size of building, meters',
             )
     size_y_prop = IntProperty(
             name='Y Size', min=1, default=10,
-            description='Y Size of building',
+            description='Y Size of building, meters',
             )
     level_count_prop = IntProperty(
             name='Level count', min=1, default=3,
             description='Building levels count',
+            )
+    level_height_prop = FloatProperty(
+            name='Level height', min=1, default=3,
+            description='Building level height, meters',
+            )
+    wnd_width_prop = FloatProperty(
+            name='Window width', min=0.1, default=1.46,
+            description='Window width, meters',
+            )
+    wnd_height_prop = FloatProperty(
+            name='Window height', min=0.1, default=1.46,
+            description='Window height, meters',
+            )
+    interval_width_prop = FloatProperty(
+            name='Interval width', min=0.1, default=1.5,
+            description='Horizontal interval width, meters',
+            )
+    gap_prop = FloatProperty(
+            name='Min horiz gap', min=0.1, default=3,
+            description='Min left/right gap size , meters',
+            )
+    top_gap_prop = FloatProperty(
+            name='Top gap', min=0.1, default=1,
+            description='Top gap size , meters',
+            )
+    bottom_gap_prop = FloatProperty(
+            name='Bottom gap', min=0.1, default=2.5,
+            description='Bottom gap size , meters',
             )
 
 
@@ -138,26 +174,23 @@ class MakeBuilding(bpy.types.Operator) :
             prev_end = vec_end    
             i += 1  
         bm.normal_update()    
-        #ret = bmesh.ops.extrude_discrete_faces(bm, faces=extruded_faces)      
         bmesh.ops.inset_individual(bm, faces=extruded_faces, depth=-0.2)
-        #bmesh.ops.solidify(bm, geom=extruded_faces, thickness=0.2)       
         return faces
             
 
     def action_common(self, context):      
         # make this configurable
-        gap = 3
+        gap = bpy.context.scene.building_props.gap_prop
+        top_gap = bpy.context.scene.building_props.top_gap_prop
+        bottom_gap = bpy.context.scene.building_props.bottom_gap_prop
         lengthX = bpy.context.scene.building_props.size_x_prop
         lengthY = bpy.context.scene.building_props.size_y_prop
         levels = bpy.context.scene.building_props.level_count_prop
-        wnd_width = 1.5
-        interval_width = 1.5
-        wnd_height = 1.5
-        level_height = 3
-        
-        bottom_gap =  2.5
-        top_gap =  1
-        
+        level_height = bpy.context.scene.building_props.level_height_prop
+        wnd_width = bpy.context.scene.building_props.wnd_width_prop
+        wnd_height = bpy.context.scene.building_props.wnd_height_prop
+        interval_width = bpy.context.scene.building_props.interval_width_prop
+    
         colsX = self.generate_wall_segs(lengthX, wnd_width, interval_width, gap)
         colsY = self.generate_wall_segs(lengthY, wnd_width, interval_width, gap)
         height_segs,total_ht = self.generate_height_segs(levels, level_height, bottom_gap, wnd_height, top_gap)
@@ -182,8 +215,10 @@ class MakeBuilding(bpy.types.Operator) :
         self.generate_wall(bm, colsY, corners11, corners10)                
         self.generate_wall(bm, colsX, corners10, corners00)    
         
-        verts = [vert for vert in bm.verts if vert.co[2] == total_ht]
-        bmesh.ops.convex_hull(bm, input=verts, use_existing_faces=True)
+#        total_ht = top_gap + level_height * levels + bottom_gap
+        verts = [vert for vert in bm.verts if math.isclose(vert.co[2], total_ht, abs_tol = 0.05)]
+        if len(verts) > 2:
+            bmesh.ops.convex_hull(bm, input=verts, use_existing_faces=True)
         bm.normal_update()  
         
         bm.to_mesh(mesh)  
