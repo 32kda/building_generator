@@ -112,7 +112,7 @@ class MakeBuilding(bpy.types.Operator) :
         cols.append(wnd_width)
         cols.append(real_gap)
         return cols
-    
+        
     def generate_height_segs(self, levels, level_height, bottom_gap, wnd_height, top_gap):
         height_segs = []
         total_ht = 0
@@ -179,7 +179,6 @@ class MakeBuilding(bpy.types.Operator) :
             
 
     def action_common(self, context):      
-        # make this configurable
         gap = bpy.context.scene.building_props.gap_prop
         top_gap = bpy.context.scene.building_props.top_gap_prop
         bottom_gap = bpy.context.scene.building_props.bottom_gap_prop
@@ -196,7 +195,7 @@ class MakeBuilding(bpy.types.Operator) :
         height_segs,total_ht = self.generate_height_segs(levels, level_height, bottom_gap, wnd_height, top_gap)
         
         mesh = bpy.data.meshes.new("mesh")  # add a new mesh
-        obj = bpy.data.objects.new("MyObject", mesh)  # add a new object using the mesh
+        obj = bpy.data.objects.new("Building", mesh)  # add a new object using the mesh
 
         scene = bpy.context.scene
         scene.objects.link(obj)  # put the object into the scene (link)
@@ -215,14 +214,15 @@ class MakeBuilding(bpy.types.Operator) :
         self.generate_wall(bm, colsY, corners11, corners10)                
         self.generate_wall(bm, colsX, corners10, corners00)    
         
-#        total_ht = top_gap + level_height * levels + bottom_gap
         verts = [vert for vert in bm.verts if math.isclose(vert.co[2], total_ht, abs_tol = 0.05)]
         if len(verts) > 2:
-            bmesh.ops.convex_hull(bm, input=verts, use_existing_faces=True)
+            ret = bmesh.ops.convex_hull(bm, input=verts, use_existing_faces=True)
+            created_faces = [ele for ele in ret["geom"] if isinstance(ele, bmesh.types.BMFace)]
+            bmesh.ops.recalc_face_normals(bm, faces = created_faces)
         bm.normal_update()  
         
         bm.to_mesh(mesh)  
-        bm.free()  # always do this when finished
+        bm.free() 
         mesh.update()        
           
     #end action_common 
