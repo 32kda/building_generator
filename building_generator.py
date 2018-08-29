@@ -38,6 +38,7 @@ import math
 import bpy
 import mathutils
 import bmesh
+from collections import OrderedDict
 from mathutils import Vector
 from bpy.types import Operator, PropertyGroup, Object, Panel
 from bpy.props import StringProperty, FloatProperty, BoolProperty, IntProperty
@@ -224,7 +225,7 @@ class MakeBuilding(bpy.types.Operator):
         :param wall_segs:  wall segments lengths array (see generate_wall_segs)
         :param start_corners: wall start corner vertices list, see generate_corner_vertices
         :param end_corners: wall end corner vertices list, see generate_corner_vertices
-        :return: created faces list
+        :return: created top vertices list for generating roof based on them
         """
         w_segs = len(wall_segs)
         norm = (end_corners[0].co - start_corners[0].co).normalized()
@@ -232,7 +233,6 @@ class MakeBuilding(bpy.types.Operator):
         prev_start = start_corners[0]
         prev_end = end_corners[0]
         prev_vectors = []
-        faces = []
         extruded_faces = []
         wall_segs_cnt = len(wall_segs)
         i = 0
@@ -253,7 +253,6 @@ class MakeBuilding(bpy.types.Operator):
                     v2 = prev_vectors[j] if len(prev_vectors) > 0 else bm.verts.new(
                         (co[0] + l * norm[0], co[1] + l * norm[1], norm[2]))
                 new_face = bm.faces.new((v1, v2, prev_v2, prev_v1))
-                faces.append(new_face)
                 if i % 2 == 1 and j % 2 == 1:
                     extruded_faces.append(new_face)
                 prev_v1 = v1
@@ -264,7 +263,7 @@ class MakeBuilding(bpy.types.Operator):
             i += 1
         bm.normal_update()
         bmesh.ops.inset_individual(bm, faces=extruded_faces, depth=-0.2)
-        return faces
+        return prev_vectors
 
     def action_common(self, context):
         gap = bpy.context.scene.building_props.gap_prop
@@ -348,22 +347,15 @@ class MakeBuilding(bpy.types.Operator):
             bm, delta_x, delta_y + length_y, height_segs)
         corners11 = MakeBuilding.generate_corner_vertices(
             bm, delta_x + length_x, delta_y + length_y, height_segs)
-        MakeBuilding.generate_wall(bm, cols_y, corners00, corners01)
-        MakeBuilding.generate_wall(bm, cols_x, corners01, corners11)
-        MakeBuilding.generate_wall(bm, cols_y, corners11, corners10)
-        MakeBuilding.generate_wall(bm, cols_x, corners10, corners00)
-        verts = [
-            vert for vert in bm.verts if math.isclose(
-                vert.co[2],
-                total_ht,
-                abs_tol=0.05)]
-        if len(verts) > 2:
-            ret = bmesh.ops.convex_hull(
-                bm, input=verts, use_existing_faces=True)
-            created_faces = [
-                ele for ele in ret["geom"] if isinstance(
-                    ele, bmesh.types.BMFace)]
-            bmesh.ops.recalc_face_normals(bm, faces=created_faces)
+        vecs1 = MakeBuilding.generate_wall(bm, cols_y, corners00, corners01)
+        vecs2 = MakeBuilding.generate_wall(bm, cols_x, corners01, corners11)
+        vecs3 = MakeBuilding.generate_wall(bm, cols_y, corners11, corners10)
+        vecs4 = MakeBuilding.generate_wall(bm, cols_x, corners10, corners00)
+        vecs = list(OrderedDict.fromkeys([corners00[-1]] + vecs1 + [corners01[-1]] + vecs2 + [corners11[-1]]  + vecs3 + [corners10[-1]] + vecs4))
+
+        if len(vecs) > 2:
+            bm.faces.new(vecs)
+
         bm.normal_update()
         bm.to_mesh(mesh)
         bm.free()
