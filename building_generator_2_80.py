@@ -44,15 +44,18 @@ from bpy.types import Operator, PropertyGroup, Object, Panel
 from bpy.props import StringProperty, FloatProperty, BoolProperty, IntProperty
 from bpy.utils import register_class, unregister_class
 
+
 def on_property_update(_, context):
-    props = context.object.building_props
-    print('Hello, world!' + props.size_x_prop)
+    if context.object is not None:
+        props = context.object.building_props
+        location = context.object.location
+        MakeBuilding.generate_from_props(location.x, location.y, props)
 
 
 class MAKER_PT_Building(bpy.types.Panel):
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    #bl_context = "objectmode"
+    # bl_context = "objectmode"
     bl_category = "Create"
     bl_label = "Add Building"
 
@@ -81,13 +84,14 @@ class MAKER_PT_Building(bpy.types.Panel):
         col.prop(props, 'level_height_prop')
         col.prop(props, 'wnd_width_prop')
         col.prop(props, 'wnd_height_prop')
-        col.prop(props,'interval_width_prop')
+        col.prop(props, 'interval_width_prop')
         col.prop(props, 'gap_prop')
         col.prop(props, 'top_gap_prop')
         col.prop(props, 'bottom_gap_prop')
 
         col.operator("mesh.make_building", text="Add Building")
     # end draw
+
 
 # end MAKER_PT_Building
 
@@ -96,48 +100,48 @@ class MAKER_PT_Building(bpy.types.Panel):
 # ------------------------------------------------------------------
 
 
-class MAKER_PT_Properties(PropertyGroup):
-    size_x_prop : IntProperty(
+class MAKER_OT_Properties(PropertyGroup):
+    size_x_prop: IntProperty(
         name='X Size', min=1, default=30,
         description='X Size of building, meters',
         subtype="DISTANCE", update=on_property_update
     )
-    size_y_prop : IntProperty(
+    size_y_prop: IntProperty(
         name='Y Size', min=1, default=10,
         description='Y Size of building, meters',
         subtype="DISTANCE", update=on_property_update
     )
-    level_count_prop : IntProperty(
+    level_count_prop: IntProperty(
         name='Level count', min=1, default=3,
         description='Building levels count',
         update=on_property_update
     )
-    level_height_prop : FloatProperty(
+    level_height_prop: FloatProperty(
         name='Level height', min=1, default=3,
         description='Building level height, meters',
         subtype="DISTANCE", update=on_property_update
     )
-    wnd_width_prop : FloatProperty(
+    wnd_width_prop: FloatProperty(
         name='Window width', min=0.1, default=1.46,
         description='Window width, meters',
     )
-    wnd_height_prop : FloatProperty(
+    wnd_height_prop: FloatProperty(
         name='Window height', min=0.1, default=1.46,
         description='Window height, meters',
     )
-    interval_width_prop : FloatProperty(
+    interval_width_prop: FloatProperty(
         name='Interval width', min=0.1, default=1.5,
         description='Horizontal interval width, meters',
     )
-    gap_prop : FloatProperty(
+    gap_prop: FloatProperty(
         name='Min horiz gap', min=0.1, default=3,
         description='Min left/right gap size , meters',
     )
-    top_gap_prop : FloatProperty(
+    top_gap_prop: FloatProperty(
         name='Top gap', min=0.1, default=1,
         description='Top gap size , meters',
     )
-    bottom_gap_prop : FloatProperty(
+    bottom_gap_prop: FloatProperty(
         name='Bottom gap', min=0.1, default=2.5,
         description='Bottom gap size , meters',
     )
@@ -149,7 +153,6 @@ class MakeBuilding(bpy.types.Operator):
     bl_options = {"REGISTER", "UNDO"}
 
     def draw(self, context):
-        #XXX props are added here instead of seperate panel. implement correct handling
         layout = self.layout
         layout.use_property_split = True  # Active single-column layout
 
@@ -196,6 +199,7 @@ class MakeBuilding(bpy.types.Operator):
                           (i - 1) * size + size - 1,
                           i * size + size - 1,
                           i * size + size - 2])
+
     # end generate_stripe
 
     @staticmethod
@@ -319,22 +323,37 @@ class MakeBuilding(bpy.types.Operator):
         return prev_vectors
 
     def action_common(self, context):
-        gap = bpy.context.object.building_props.gap_prop
-        top_gap = bpy.context.object.building_props.top_gap_prop
-        bottom_gap = bpy.context.object.building_props.bottom_gap_prop
-        length_x = bpy.context.object.building_props.size_x_prop
-        length_y = bpy.context.object.building_props.size_y_prop
-        levels = bpy.context.object.building_props.level_count_prop
-        level_height = bpy.context.object.building_props.level_height_prop
-        wnd_width = bpy.context.object.building_props.wnd_width_prop
-        wnd_height = bpy.context.object.building_props.wnd_height_prop
-        interval_width = bpy.context.object.building_props.interval_width_prop
-
+        mesh = bpy.data.meshes.new("mesh")  # add a new mesh
+        # add a new object using the mesh
+        obj = bpy.data.objects.new("Building", mesh)
         location = bpy.context.scene.cursor.location
 
-        self.generate_building(
+        bpy.context.scene.collection.objects.link(obj)  # put the object into the scene (link)
+        bpy.context.view_layer.objects.active = obj  # set as the active object in the scene
+
+        MakeBuilding.generate_from_props(
             location.x,
             location.y,
+            bpy.context.object.building_props)
+
+    # end action_common
+
+    @classmethod
+    def generate_from_props(cls, location_x, location_y, props: MAKER_OT_Properties):
+        gap = props.gap_prop
+        top_gap = props.top_gap_prop
+        bottom_gap = props.bottom_gap_prop
+        length_x = props.size_x_prop
+        length_y = props.size_y_prop
+        levels = props.level_count_prop
+        level_height = props.level_height_prop
+        wnd_width = props.wnd_width_prop
+        wnd_height = props.wnd_height_prop
+        interval_width = props.interval_width_prop
+
+        MakeBuilding.generate_building(
+            location_x,
+            location_y,
             length_x,
             length_y,
             level_height,
@@ -346,10 +365,11 @@ class MakeBuilding(bpy.types.Operator):
             wnd_height,
             wnd_width)
 
+    @classmethod
     def generate_building(
-            self,
-            cursor_x,
-            cursor_y,
+            cls,
+            location_x,
+            location_y,
             length_x,
             length_y,
             level_height,
@@ -362,8 +382,8 @@ class MakeBuilding(bpy.types.Operator):
             wnd_width):
         """
         Key method responsible for building mesh generation
-        :param cursor_x: cursor x position
-        :param cursor_y: cursor y position
+        :param location_x: cursor x position
+        :param location_y: cursor y position
         :param length_x: Building X size, m
         :param length_y: Building Y size, m
         :param level_height: Building level height, m
@@ -381,17 +401,14 @@ class MakeBuilding(bpy.types.Operator):
             length_y, wnd_width, interval_width, gap)
         height_segs, total_ht = MakeBuilding.generate_height_segs(
             levels, level_height, bottom_gap, wnd_height, top_gap)
-        mesh = bpy.data.meshes.new("mesh")  # add a new mesh
-        # add a new object using the mesh
-        obj = bpy.data.objects.new("Building", mesh)
+
         scene = bpy.context.scene
-        scene.collection.objects.link(obj)  # put the object into the scene (link)
-        bpy.context.view_layer.objects.active = obj  # set as the active object in the scene
+        obj = bpy.context.object
         obj.select_set(True)  # select object
         mesh = bpy.context.object.data
         bm = bmesh.new()
-        delta_x = cursor_x - length_x / 2
-        delta_y = cursor_y - length_y / 2
+        delta_x = location_x - length_x / 2
+        delta_y = location_y - length_y / 2
         corners00 = MakeBuilding.generate_corner_vertices(
             bm, delta_x, delta_y, height_segs)
         corners10 = MakeBuilding.generate_corner_vertices(
@@ -404,21 +421,23 @@ class MakeBuilding(bpy.types.Operator):
         vecs2 = MakeBuilding.generate_wall(bm, cols_x, corners01, corners11)
         vecs3 = MakeBuilding.generate_wall(bm, cols_y, corners11, corners10)
         vecs4 = MakeBuilding.generate_wall(bm, cols_x, corners10, corners00)
-        vecs = list(OrderedDict.fromkeys([corners00[-1]] + vecs1 + [corners01[-1]] + vecs2 + [corners11[-1]]  + vecs3 + [corners10[-1]] + vecs4))
+        vecs = list(OrderedDict.fromkeys(
+            [corners00[-1]] + vecs1 + [corners01[-1]] + vecs2 + [corners11[-1]] + vecs3 + [corners10[-1]] + vecs4))
 
         if len(vecs) > 2:
             bm.faces.new(vecs)
 
         bm.normal_update()
-        bm.to_mesh(mesh)
+        bm.to_mesh(bpy.context.object.data)
         bm.free()
         mesh.update()
 
-    # end action_common
+        bpy.context.scene.update()
 
     def execute(self, context):
         self.action_common(context)
         return {"FINISHED"}
+
     # end execute
 
     def invoke(self, context, event):
@@ -426,28 +445,34 @@ class MakeBuilding(bpy.types.Operator):
         return {"FINISHED"}
     # end invoke
 
+
 # end MakeBuilding
 
 
 def add_to_menu(self, context):
     self.layout.operator("mesh.make_building", icon="PLUGIN")
+
+
 # end add_to_menu
 
 classes = (
     MakeBuilding,
     MAKER_PT_Building,
-    MAKER_PT_Properties,
+    MAKER_OT_Properties,
 )
+
 
 def register():
     for clazz in classes:
         register_class(clazz)
     Object.building_props = bpy.props.PointerProperty(
-        type=MAKER_PT_Properties,
+        type=MAKER_OT_Properties,
         name="building_props",
         description="Generated building properties"
     )
     bpy.types.VIEW3D_MT_mesh_add.append(add_to_menu)
+
+
 # end register
 
 
@@ -456,6 +481,8 @@ def unregister():
         unregister_class(clazz)
     bpy.types.VIEW3D_MT_mesh_add.remove(add_to_menu)
     del Object.building_props
+
+
 # end unregister
 
 
